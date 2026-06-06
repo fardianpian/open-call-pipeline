@@ -1,0 +1,3 @@
+# Script hanya memakai pustaka standar Python (urllib, json).
+# Tidak ada dependency eksternal yang wajib. File ini sengaja dibiarkan kosong
+# agar `pip install -r requirements.txt` tetap aman dijalankan.
