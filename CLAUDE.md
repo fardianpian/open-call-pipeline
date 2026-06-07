@@ -15,6 +15,9 @@ This is also packaged as an Agent Skill (see `SKILL.md`).
 
 - **Exclude residencies.** This pipeline is only for opportunities to present,
   perform, or showcase work. Never add residency calls.
+- **Eligibility filter.** Only include open calls that are open to international
+  applicants (worldwide) OR specifically welcoming Indonesian artists. Skip calls
+  restricted to citizens/residents of countries that exclude Indonesia.
 - **Do not fabricate data.** Every open call must be real and verifiable. Sample
   data is clearly labelled as an example and must be replaced before importing.
 - **Entry content in English.** Database entries are written in English even
