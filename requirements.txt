@@ -1,3 +1,3 @@
-# Script hanya memakai pustaka standar Python (urllib, json).
-# Tidak ada dependency eksternal yang wajib. File ini sengaja dibiarkan kosong
-# agar `pip install -r requirements.txt` tetap aman dijalankan.
+# add_open_calls.py — importer Notion, hanya stdlib (urllib, json). Tidak perlu install apapun.
+# instagram_scrape.py — membutuhkan Instaloader:
+instaloader

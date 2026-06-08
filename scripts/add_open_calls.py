@@ -20,6 +20,8 @@ import os
 import sys
 import urllib.request
 import urllib.error
+from datetime import date
+import pipeline_log
 
 NOTION_VERSION = "2022-06-28"
 API_URL = "https://api.notion.com/v1/pages"
@@ -36,7 +38,7 @@ ALLOWED = {
     "Format": ["In-person", "Remote", "Hybrid"],
     "Funding": ["Funded", "Fee-free", "Fee required"],
     "Status": ["New", "Maybe", "Applied", "Submitted", "Won", "Rejected", "Skipped"],
-    "Source": ["Perplexity", "Claude Routine", "Manual", "Referral"],
+    "Source": ["Perplexity", "Claude Routine", "Manual", "Referral", "Instagram"],
     "Applicant": ["Fardian", "Yessica", "Saodor Ensemble"],
 }
 
@@ -111,6 +113,11 @@ def build_properties(item):
     if item.get("Link"):
         props["Link"] = {"url": item["Link"]}
 
+    # Selalu isi "Date Added" dengan tanggal hari ini saat script dijalankan,
+    # kecuali JSON sudah menyertakannya (untuk backfill manual).
+    date_added = item.get("Date Added") or date.today().isoformat()
+    props["Date Added"] = {"date": {"start": date_added}}
+
     return props
 
 
@@ -184,6 +191,16 @@ def main():
             fail += 1
 
     print(f"\nSelesai. Berhasil: {ok} | Gagal: {fail}")
+
+    if not dry_run:
+        pipeline_log.record(
+            "import:notion",
+            input_file=os.path.relpath(infile_path, ROOT),
+            entries_total=len(items),
+            entries_ok=ok,
+            entries_failed=fail,
+            status="ok" if fail == 0 else "partial",
+        )
 
 
 if __name__ == "__main__":

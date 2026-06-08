@@ -1,5 +1,9 @@
 .env
 open_calls.json
+open_calls_instagram.json
+pipeline_history.json
+.instaloader_session_*
+.venv/
 __pycache__/
 *.pyc
 .DS_Store

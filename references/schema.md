@@ -16,9 +16,10 @@ Input is a JSON **array of objects** (or a single object). Every entry must have
 | `Deadline` | Date | ISO `YYYY-MM-DD` (time optional) |
 | `Fit Score` | Number | 1–5 (5 = best fit) |
 | `Status` | Status | `New`, `Maybe`, `Applied`, `Submitted`, `Won`, `Rejected`, `Skipped` (default `New`) |
-| `Source` | Select | `Perplexity`, `Claude Routine`, `Manual`, `Referral` |
+| `Source` | Select | `Perplexity`, `Claude Routine`, `Manual`, `Referral`, `Instagram` |
 | `Link` | URL | Direct link to the open call |
 | `Notes` | Text | Free notes |
+| `Date Added` | Date | Diisi otomatis saat import (tanggal script dijalankan). Bisa diisi manual untuk backfill. |
 
 ## Rules
 
