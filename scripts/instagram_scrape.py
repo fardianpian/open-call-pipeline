@@ -1,41 +1,37 @@
 #!/usr/bin/env python3
 """
-Instagram Open Call Scraper
-Menelusuri hashtag & akun IG untuk pengumuman open call, lalu menghasilkan
-open_calls_instagram.json yang siap diimpor ke Notion via add_open_calls.py.
+Instagram Open Call Scraper — via Apify
+Menjalankan Apify Instagram Hashtag Scraper actor untuk mencari open call,
+lalu menyaring hasil dan menghasilkan open_calls_instagram.json.
+
+Setup:
+    1. Daftar di https://apify.com (free tier: $5 kredit/bulan)
+    2. Ambil API token: https://console.apify.com/account/integrations
+    3. Tambahkan APIFY_TOKEN ke .env
 
 Penggunaan:
     python scripts/instagram_scrape.py
     python scripts/instagram_scrape.py --dry-run
     python scripts/instagram_scrape.py --max-posts=30
-
-Konfigurasi di .env:
-    IG_USERNAME  = username Instagram (opsional, tapi sangat dianjurkan)
-    IG_PASSWORD  = password Instagram (opsional)
-
-Membutuhkan: pip install instaloader
 """
 
 import json
 import os
 import re
 import sys
-from datetime import datetime, timezone, timedelta
-
-try:
-    import instaloader
-except ImportError:
-    sys.exit(
-        "❌ Instaloader belum terinstall.\n"
-        "   Jalankan: .venv/bin/pip install instaloader"
-    )
-
+import time
+import urllib.request
+import urllib.error
 import pipeline_log
+from datetime import datetime, timezone, timedelta
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+APIFY_BASE = "https://api.apify.com/v2"
+ACTOR_ID   = "apify~instagram-hashtag-scraper"
+
 # ---------------------------------------------------------------------------
-# Konfigurasi sumber
+# Sumber pencarian
 # ---------------------------------------------------------------------------
 
 HASHTAGS = [
@@ -49,17 +45,11 @@ HASHTAGS = [
     "musicsubmissions",
 ]
 
-# Akun-akun organisasi seni yang sering posting open call.
-# Tambahkan username (tanpa @) sesuai kebutuhan.
-IG_ACCOUNTS = [
-    "classicalnext",
-    "womex_official",
-    "ims_media",           # International Music Summit
-    "newmusicusa",
-    "icmc_sounds",
-    "spatialmedialabs",
-    "cimeba_music",
-    "artsmusicberlin",
+# Tambahkan URL profil IG organisasi seni yang rutin posting open call.
+# Format: "https://www.instagram.com/username/"
+IG_PROFILE_URLS = [
+    # "https://www.instagram.com/classicalnext/",
+    # "https://www.instagram.com/womex/",
 ]
 
 # ---------------------------------------------------------------------------
@@ -67,10 +57,9 @@ IG_ACCOUNTS = [
 # ---------------------------------------------------------------------------
 
 OPEN_CALL_KEYWORDS = [
-    "open call", "call for", "call for submissions", "call for entries",
-    "call for works", "call for artists", "apply now", "applications open",
-    "deadline", "submit your", "we are accepting", "accepting submissions",
-    "accepting applications", "submit by", "entries open",
+    "open call", "call for", "submissions", "apply now", "deadline",
+    "application", "submit your", "we are accepting", "accepting submissions",
+    "call for entries", "call for works", "entries open",
 ]
 
 RESIDENCY_KEYWORDS = [
@@ -80,15 +69,13 @@ RESIDENCY_KEYWORDS = [
 
 INTL_INDICATORS = [
     "international", "worldwide", "global", "open to all",
-    "all countries", "artists worldwide", "open internationally",
-    "artists from anywhere",
+    "all countries", "artists worldwide",
 ]
 
 GEO_RESTRICT_KEYWORDS = [
     "us citizens only", "uk only", "eu only", "european citizens",
-    "american citizens only", "british citizens only",
-    "australian citizens only", "residents only",
-    "must be based in", "must reside in",
+    "american citizens only", "must be based in", "must reside in",
+    "residents only",
 ]
 
 SOUND_HIGH = [
@@ -119,37 +106,91 @@ def load_env():
             os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
 
 
-def is_open_call(caption: str) -> bool:
+def apify_request(method, path, token, body=None):
+    url = f"{APIFY_BASE}{path}?token={token}"
+    data = json.dumps(body).encode() if body else None
+    req = urllib.request.Request(url, data=data, method=method)
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        body_txt = e.read().decode("utf-8", "ignore")
+        raise RuntimeError(f"HTTP {e.code}: {body_txt[:300]}")
+
+
+def run_actor(token, actor_input, timeout_sec=300):
+    """Jalankan actor, poll sampai selesai, kembalikan dataset ID."""
+    print(f"   ▶ Memulai actor {ACTOR_ID} ...")
+    resp = apify_request("POST", f"/acts/{ACTOR_ID}/runs", token, actor_input)
+    run_id = resp["data"]["id"]
+    dataset_id = resp["data"]["defaultDatasetId"]
+    print(f"   Run ID: {run_id}")
+
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        time.sleep(8)
+        status_resp = apify_request("GET", f"/acts/{ACTOR_ID}/runs/{run_id}", token)
+        status = status_resp["data"]["status"]
+        print(f"   Status: {status}")
+        if status == "SUCCEEDED":
+            return dataset_id
+        if status in ("FAILED", "ABORTED", "TIMED-OUT"):
+            raise RuntimeError(f"Actor run {status}")
+    raise RuntimeError("Timeout menunggu actor selesai")
+
+
+def fetch_dataset(token, dataset_id):
+    resp = apify_request("GET", f"/datasets/{dataset_id}/items", token)
+    return resp if isinstance(resp, list) else resp.get("items", [])
+
+
+# ---------------------------------------------------------------------------
+# Filter & konversi post → entry
+# ---------------------------------------------------------------------------
+
+def is_open_call(caption):
     lower = caption.lower()
     return any(kw in lower for kw in OPEN_CALL_KEYWORDS)
 
 
-def is_residency(caption: str) -> bool:
+def is_residency(caption):
     lower = caption.lower()
     return any(kw in lower for kw in RESIDENCY_KEYWORDS)
 
 
-def is_eligible(caption: str) -> bool:
+def is_eligible(caption):
     lower = caption.lower()
     if any(kw in lower for kw in GEO_RESTRICT_KEYWORDS):
         return any(kw in lower for kw in INTL_INDICATORS)
     return True
 
 
-def extract_deadline(caption: str):
-    """Coba ekstrak tanggal deadline dari teks caption. Return 'YYYY-MM-DD' atau None."""
+def fit_score(caption):
+    lower = caption.lower()
+    score = 2
+    if any(k in lower for k in SOUND_HIGH):
+        score = 4
+    elif any(k in lower for k in SOUND_MED):
+        score = 3
+    if any(k in lower for k in ["funded", "no fee", "fee waived", "no submission fee"]):
+        score = min(score + 1, 5)
+    return score
+
+
+def extract_deadline(caption):
     patterns = [
         r'deadline[:\s]+(\d{4}-\d{2}-\d{2})',
-        r'deadline[:\s]+(\w+ \d{1,2},?\s+\d{4})',
+        r'deadline[:\s]+(\w+ \d{1,2},?\s*\d{4})',
         r'deadline[:\s]+(\d{1,2}[\./]\d{1,2}[\./]\d{4})',
-        r'by\s+(\w+ \d{1,2},?\s+\d{4})',
-        r'closes?\s+(\w+ \d{1,2},?\s+\d{4})',
-        r'due[:\s]+(\w+ \d{1,2},?\s+\d{4})',
+        r'by\s+(\w+ \d{1,2},?\s*\d{4})',
+        r'closes?\s+(\w+ \d{1,2},?\s*\d{4})',
+        r'due[:\s]+(\w+ \d{1,2},?\s*\d{4})',
         r'(\d{4}-\d{2}-\d{2})',
-        r'(\d{1,2}[\./]\d{1,2}[\./]\d{4})',
     ]
     formats = [
-        "%Y-%m-%d", "%B %d, %Y", "%B %d %Y", "%b %d, %Y", "%b %d %Y",
+        "%Y-%m-%d", "%B %d, %Y", "%B %d %Y",
+        "%b %d, %Y", "%b %d %Y",
         "%d/%m/%Y", "%m/%d/%Y", "%d.%m.%Y",
     ]
     for pattern in patterns:
@@ -160,21 +201,20 @@ def extract_deadline(caption: str):
         for fmt in formats:
             try:
                 parsed = datetime.strptime(raw, fmt)
-                if parsed.year < 2025:
-                    continue
-                return parsed.strftime("%Y-%m-%d")
+                if parsed.year >= 2025:
+                    return parsed.strftime("%Y-%m-%d")
             except ValueError:
                 continue
     return None
 
 
-def extract_external_link(caption: str, fallback: str) -> str:
+def extract_link(caption, post_url):
     urls = re.findall(r'https?://[^\s\)>\]]+', caption)
     external = [u for u in urls if "instagram.com" not in u]
-    return external[0] if external else fallback
+    return external[0] if external else post_url
 
 
-def build_title(caption: str, username: str) -> str:
+def build_title(caption, username):
     first = caption.split("\n")[0].strip()
     clean = re.sub(r"#\w+", "", first).strip()
     clean = re.sub(r"\s+", " ", clean).strip("•·–—- ")
@@ -183,147 +223,32 @@ def build_title(caption: str, username: str) -> str:
     return clean or f"Open Call via @{username}"
 
 
-def fit_score(caption: str) -> int:
-    lower = caption.lower()
-    score = 2
-    if any(k in lower for k in SOUND_HIGH):
-        score = 4
-    elif any(k in lower for k in SOUND_MED):
-        score = 3
-    funded = any(k in lower for k in ["funded", "fee waived", "no fee", "no submission fee"])
-    if funded:
-        score = min(score + 1, 5)
-    return score
-
-
-def post_to_entry(post) -> dict:
-    caption = post.caption or ""
-    username = post.owner_username
-    post_url = f"https://www.instagram.com/p/{post.shortcode}/"
-
-    deadline = extract_deadline(caption)
-    notes_caption = caption[:400].replace("\n", " ")
+def post_to_entry(item):
+    caption     = item.get("caption") or item.get("text") or ""
+    username    = item.get("ownerUsername") or item.get("username") or "unknown"
+    post_url    = item.get("url") or item.get("shortCode") or ""
+    if post_url and not post_url.startswith("http"):
+        post_url = f"https://www.instagram.com/p/{post_url}/"
 
     entry = {
-        "Program": build_title(caption, username),
-        "Organizer": f"@{username}",
-        "Type": "Call for Works",
+        "Program":    build_title(caption, username),
+        "Organizer":  f"@{username}",
+        "Type":       "Call for Works",
         "Discipline": "Sound Art",
-        "Applicant": ["Fardian", "Yessica", "Saodor Ensemble"],
-        "Location": "TBD — verify on source",
-        "Format": "In-person",
-        "Funding": "Fee-free",
-        "Fit Score": fit_score(caption),
-        "Status": "New",
-        "Source": "Instagram",
-        "Link": extract_external_link(caption, post_url),
-        "Notes": f"IG @{username} | {post_url} | Caption: {notes_caption}",
+        "Applicant":  ["Fardian", "Yessica", "Saodor Ensemble"],
+        "Location":   "TBD — verify on source",
+        "Format":     "In-person",
+        "Funding":    "Fee-free",
+        "Fit Score":  fit_score(caption),
+        "Status":     "New",
+        "Source":     "Instagram",
+        "Link":       extract_link(caption, post_url),
+        "Notes":      f"IG @{username} | {post_url} | {caption[:300].replace(chr(10),' ')}",
     }
+    deadline = extract_deadline(caption)
     if deadline:
         entry["Deadline"] = deadline
     return entry
-
-
-# ---------------------------------------------------------------------------
-# Login helper
-# ---------------------------------------------------------------------------
-
-def login(L: instaloader.Instaloader):
-    username = os.environ.get("IG_USERNAME", "").strip()
-    password = os.environ.get("IG_PASSWORD", "").strip()
-    if not username or not password:
-        print(
-            "ℹ️  Tidak ada IG_USERNAME/IG_PASSWORD di .env.\n"
-            "   Rate limit tanpa login: ~50 req/jam (hashtag terbatas).\n"
-        )
-        return
-    try:
-        session_file = os.path.join(ROOT, f".instaloader_session_{username}")
-        if os.path.exists(session_file):
-            L.load_session_from_file(username, session_file)
-            print(f"✅ Session dimuat untuk @{username}")
-        else:
-            L.login(username, password)
-            L.save_session_to_file(session_file)
-            print(f"✅ Login berhasil sebagai @{username}")
-    except Exception as e:
-        print(f"⚠️  Login gagal: {e}\n   Melanjutkan tanpa login.")
-
-
-# ---------------------------------------------------------------------------
-# Scraper utama
-# ---------------------------------------------------------------------------
-
-def scrape_hashtag(L, tag: str, max_posts: int, seen: set, cutoff_days: int) -> list:
-    results = []
-    cutoff = datetime.now(timezone.utc) - timedelta(days=cutoff_days)
-    count = 0
-    print(f"\n  #{tag} ...")
-    try:
-        ht = instaloader.Hashtag.from_name(L.context, tag)
-        for post in ht.get_posts():
-            if count >= max_posts:
-                break
-            count += 1
-            try:
-                if post.shortcode in seen:
-                    continue
-                if post.date_utc < cutoff:
-                    break
-                seen.add(post.shortcode)
-                caption = post.caption or ""
-                if not is_open_call(caption):
-                    continue
-                if is_residency(caption):
-                    print(f"    ⏭ residency skip: {post.shortcode}")
-                    continue
-                if not is_eligible(caption):
-                    print(f"    ⏭ eligibility skip: {post.shortcode}")
-                    continue
-                entry = post_to_entry(post)
-                results.append(entry)
-                print(f"    ✅ {entry['Program'][:65]}")
-            except Exception as exc:
-                print(f"    ⚠️ post error: {exc}")
-    except Exception as exc:
-        print(f"    ❌ gagal scrape #{tag}: {exc}")
-    return results
-
-
-def scrape_account(L, username: str, max_posts: int, seen: set, cutoff_days: int) -> list:
-    results = []
-    cutoff = datetime.now(timezone.utc) - timedelta(days=cutoff_days)
-    count = 0
-    print(f"\n  @{username} ...")
-    try:
-        profile = instaloader.Profile.from_username(L.context, username)
-        for post in profile.get_posts():
-            if count >= max_posts:
-                break
-            count += 1
-            try:
-                if post.shortcode in seen:
-                    continue
-                if post.date_utc < cutoff:
-                    break
-                seen.add(post.shortcode)
-                caption = post.caption or ""
-                if not is_open_call(caption):
-                    continue
-                if is_residency(caption):
-                    print(f"    ⏭ residency skip: {post.shortcode}")
-                    continue
-                if not is_eligible(caption):
-                    print(f"    ⏭ eligibility skip: {post.shortcode}")
-                    continue
-                entry = post_to_entry(post)
-                results.append(entry)
-                print(f"    ✅ {entry['Program'][:65]}")
-            except Exception as exc:
-                print(f"    ⚠️ post error: {exc}")
-    except Exception as exc:
-        print(f"    ❌ gagal scrape @{username}: {exc}")
-    return results
 
 
 # ---------------------------------------------------------------------------
@@ -333,57 +258,110 @@ def scrape_account(L, username: str, max_posts: int, seen: set, cutoff_days: int
 def main():
     load_env()
 
-    dry_run = "--dry-run" in sys.argv
+    dry_run   = "--dry-run" in sys.argv
     max_posts = 25
-    cutoff_days = 60
     for arg in sys.argv[1:]:
         if arg.startswith("--max-posts="):
             max_posts = int(arg.split("=")[1])
-        if arg.startswith("--days="):
-            cutoff_days = int(arg.split("=")[1])
+
+    token = os.environ.get("APIFY_TOKEN", "").strip()
+    if not token:
+        sys.exit(
+            "❌ APIFY_TOKEN belum diisi di .env\n"
+            "   Daftar gratis: https://apify.com\n"
+            "   Token: https://console.apify.com/account/integrations"
+        )
 
     print("=" * 60)
-    print("📸 Instagram Open Call Scraper")
-    print(f"   Max posts per sumber : {max_posts}")
-    print(f"   Rentang waktu        : {cutoff_days} hari terakhir")
-    print(f"   Mode                 : {'dry-run' if dry_run else 'normal'}")
+    print("📸 Instagram Open Call Scraper — via Apify")
+    print(f"   Hashtags  : {len(HASHTAGS)} tag")
+    print(f"   Max posts : {max_posts} per hashtag")
+    print(f"   Mode      : {'dry-run' if dry_run else 'normal'}")
     print("=" * 60)
 
-    L = instaloader.Instaloader(
-        download_pictures=False,
-        download_videos=False,
-        download_video_thumbnails=False,
-        download_comments=False,
-        save_metadata=False,
-        quiet=True,
-    )
-    login(L)
-
-    seen = set()
     all_entries = []
+    seen_urls   = set()
 
-    print("\n── Hashtags ─────────────────────────────────────────")
+    # Scrape per hashtag (satu actor run per hashtag agar lebih terkontrol)
     for tag in HASHTAGS:
-        entries = scrape_hashtag(L, tag, max_posts, seen, cutoff_days)
-        all_entries.extend(entries)
+        print(f"\n  #{tag} ...")
+        if dry_run:
+            print("   🧪 dry-run, skip API call")
+            continue
+        try:
+            actor_input = {
+                "hashtags":     [tag],
+                "resultsLimit": max_posts,
+            }
+            dataset_id = run_actor(token, actor_input)
+            items      = fetch_dataset(token, dataset_id)
+            print(f"   {len(items)} post diambil")
 
-    if IG_ACCOUNTS:
-        print("\n── Akun Organisasi ──────────────────────────────────")
-        for account in IG_ACCOUNTS:
-            entries = scrape_account(L, account, max_posts, seen, cutoff_days)
-            all_entries.extend(entries)
+            for item in items:
+                caption  = item.get("caption") or item.get("text") or ""
+                post_url = item.get("url") or ""
+                if post_url in seen_urls:
+                    continue
+                seen_urls.add(post_url)
+
+                if not is_open_call(caption):
+                    continue
+                if is_residency(caption):
+                    print(f"   ⏭ residency skip")
+                    continue
+                if not is_eligible(caption):
+                    print(f"   ⏭ eligibility skip")
+                    continue
+
+                entry = post_to_entry(item)
+                all_entries.append(entry)
+                print(f"   ✅ {entry['Program'][:65]}")
+
+        except Exception as exc:
+            print(f"   ❌ Error: {exc}")
+
+    # Scrape profil (opsional)
+    if IG_PROFILE_URLS and not dry_run:
+        print(f"\n  Profil IG ({len(IG_PROFILE_URLS)}) ...")
+        try:
+            actor_input = {
+                "directUrls":   IG_PROFILE_URLS,
+                "resultsLimit": max_posts,
+            }
+            dataset_id = run_actor(token, actor_input)
+            items      = fetch_dataset(token, dataset_id)
+            for item in items:
+                caption  = item.get("caption") or item.get("text") or ""
+                post_url = item.get("url") or ""
+                if post_url in seen_urls:
+                    continue
+                seen_urls.add(post_url)
+                if not is_open_call(caption) or is_residency(caption):
+                    continue
+                if not is_eligible(caption):
+                    continue
+                entry = post_to_entry(item)
+                all_entries.append(entry)
+                print(f"   ✅ {entry['Program'][:65]}")
+        except Exception as exc:
+            print(f"   ❌ Error profil: {exc}")
 
     print(f"\n{'─' * 60}")
-    print(f"Total ditemukan: {len(all_entries)} open call\n")
-
-    if not all_entries:
-        print("⚠️  Tidak ada open call yang memenuhi filter.")
-        return
+    print(f"Total ditemukan: {len(all_entries)} open call")
 
     if dry_run:
-        print("🧪 dry-run — tidak menulis file.")
-        for i, e in enumerate(all_entries, 1):
-            print(f"  [{i}] {e['Program']} | Deadline: {e.get('Deadline', '-')} | Score: {e['Fit Score']}")
+        print("🧪 dry-run selesai — tidak ada file ditulis.")
+        return
+
+    if not all_entries:
+        print("⚠️  Tidak ada open call yang lolos filter.")
+        pipeline_log.record(
+            "scrape:instagram",
+            source="apify",
+            hashtags=HASHTAGS,
+            entries_found=0,
+            status="ok",
+        )
         return
 
     out_path = os.path.join(ROOT, "open_calls_instagram.json")
@@ -392,19 +370,18 @@ def main():
 
     pipeline_log.record(
         "scrape:instagram",
+        source="apify",
         hashtags=HASHTAGS,
-        accounts=IG_ACCOUNTS,
-        max_posts_per_source=max_posts,
-        days_window=cutoff_days,
+        max_posts_per_hashtag=max_posts,
         entries_found=len(all_entries),
         output_file="open_calls_instagram.json",
         status="ok",
     )
 
-    print(f"✅ Tersimpan: open_calls_instagram.json ({len(all_entries)} entri)")
+    print(f"✅ Tersimpan: open_calls_instagram.json")
     print()
     print("▶️  Langkah selanjutnya:")
-    print("   1. Tinjau open_calls_instagram.json — verifikasi manual setiap link")
+    print("   1. Tinjau open_calls_instagram.json — verifikasi link")
     print("   2. python scripts/add_open_calls.py open_calls_instagram.json --dry-run")
     print("   3. python scripts/add_open_calls.py open_calls_instagram.json")
 

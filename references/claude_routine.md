@@ -10,10 +10,10 @@ KONTEKS PROFIL:
 - Bilingual ID/EN. Mencari peluang presentasi karya: showcase, festival, performance slot, exhibition, commission, competition, call for works (TANPA residensi).
 
 TUGAS:
-1. Jalankan Instagram scraper untuk ambil peluang dari IG:
-     source .venv/bin/activate
+1. Jalankan Instagram scraper via Apify (butuh APIFY_TOKEN di .env):
      python scripts/instagram_scrape.py
    Tinjau open_calls_instagram.json — verifikasi link sebelum import.
+   (Tidak perlu login IG, tidak perlu browser, murni API call.)
 
 2. Cari peluang TERBARU yang masih buka (deadline ≥ hari ini) dari situs resmi penyelenggara & platform showcase/festival kredibel (Classical:NEXT, WOMEX, Eurosonic, On the Move, dll). JANGAN sertakan residensi.
 

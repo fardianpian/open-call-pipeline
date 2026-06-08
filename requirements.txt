@@ -1,3 +1,2 @@
-# add_open_calls.py — importer Notion, hanya stdlib (urllib, json). Tidak perlu install apapun.
-# instagram_scrape.py — membutuhkan Instaloader:
-instaloader
+# add_open_calls.py dan instagram_scrape.py hanya memakai pustaka standar Python.
+# Tidak ada dependency eksternal — pip install -r requirements.txt aman dijalankan tanpa efek.
