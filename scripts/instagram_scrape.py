@@ -23,7 +23,7 @@ import time
 import urllib.request
 import urllib.error
 import pipeline_log
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -214,6 +214,14 @@ def extract_link(caption, post_url):
     return external[0] if external else post_url
 
 
+def post_key(item):
+    """Identitas unik post untuk dedup. Fallback ke id(item) kalau item tidak
+    punya id/shortCode/url sama sekali, supaya post tanpa field itu tidak
+    saling dianggap duplikat satu sama lain."""
+    key = item.get("id") or item.get("shortCode") or item.get("url")
+    return key or id(item)
+
+
 def build_title(caption, username):
     first = caption.split("\n")[0].strip()
     clean = re.sub(r"#\w+", "", first).strip()
@@ -265,7 +273,7 @@ def main():
             max_posts = int(arg.split("=")[1])
 
     token = os.environ.get("APIFY_TOKEN", "").strip()
-    if not token:
+    if not dry_run and not token:
         sys.exit(
             "❌ APIFY_TOKEN belum diisi di .env\n"
             "   Daftar gratis: https://apify.com\n"
@@ -280,7 +288,7 @@ def main():
     print("=" * 60)
 
     all_entries = []
-    seen_urls   = set()
+    seen_keys   = set()
 
     # Scrape per hashtag (satu actor run per hashtag agar lebih terkontrol)
     for tag in HASHTAGS:
@@ -298,19 +306,19 @@ def main():
             print(f"   {len(items)} post diambil")
 
             for item in items:
-                caption  = item.get("caption") or item.get("text") or ""
-                post_url = item.get("url") or ""
-                if post_url in seen_urls:
+                caption = item.get("caption") or item.get("text") or ""
+                key = post_key(item)
+                if key in seen_keys:
                     continue
-                seen_urls.add(post_url)
+                seen_keys.add(key)
 
                 if not is_open_call(caption):
                     continue
                 if is_residency(caption):
-                    print(f"   ⏭ residency skip")
+                    print("   ⏭ residency skip")
                     continue
                 if not is_eligible(caption):
-                    print(f"   ⏭ eligibility skip")
+                    print("   ⏭ eligibility skip")
                     continue
 
                 entry = post_to_entry(item)
@@ -331,11 +339,11 @@ def main():
             dataset_id = run_actor(token, actor_input)
             items      = fetch_dataset(token, dataset_id)
             for item in items:
-                caption  = item.get("caption") or item.get("text") or ""
-                post_url = item.get("url") or ""
-                if post_url in seen_urls:
+                caption = item.get("caption") or item.get("text") or ""
+                key = post_key(item)
+                if key in seen_keys:
                     continue
-                seen_urls.add(post_url)
+                seen_keys.add(key)
                 if not is_open_call(caption) or is_residency(caption):
                     continue
                 if not is_eligible(caption):
@@ -378,7 +386,7 @@ def main():
         status="ok",
     )
 
-    print(f"✅ Tersimpan: open_calls_instagram.json")
+    print("✅ Tersimpan: open_calls_instagram.json")
     print()
     print("▶️  Langkah selanjutnya:")
     print("   1. Tinjau open_calls_instagram.json — verifikasi link")
