@@ -16,7 +16,10 @@ open-call-pipeline/
 ├─ run.sh / run.bat          # peluncur
 ├─ requirements.txt          # kosong (hanya pustaka standar Python)
 ├─ scripts/
-│  └─ add_open_calls.py      # importer
+│  ├─ add_open_calls.py      # importer ke Notion
+│  ├─ instagram_scrape.py    # sourcing open call dari Instagram (via Apify)
+│  ├─ pipeline_log.py        # helper: catat riwayat run ke pipeline_history.json
+│  └─ show_log.py            # tampilkan riwayat run sebagai tabel
 ├─ references/
 │  ├─ schema.md              # referensi field + opsi valid
 │  ├─ perplexity.md          # Prompt 1 (pencarian cepat)
@@ -69,6 +72,34 @@ Langsung: `python scripts/add_open_calls.py --dry-run`.
 
 Lihat `references/schema.md` untuk daftar field & opsi valid. Mulai dari
 `assets/open_calls.sample.json`. Isi entri dalam **Bahasa Inggris**.
+
+## Sourcing dari Instagram (opsional)
+
+`scripts/instagram_scrape.py` mencari open call lewat hashtag/profil
+Instagram memakai Apify actor `instagram-hashtag-scraper`.
+
+1. Daftar gratis di https://apify.com (free tier: ~$5 kredit/bulan).
+2. Ambil token di https://console.apify.com/account/integrations, isi
+   `APIFY_TOKEN` di `.env` (lihat `assets/.env.example`).
+3. Jalankan:
+   ```bash
+   python scripts/instagram_scrape.py --dry-run   # cek daftar hashtag, tanpa API call
+   python scripts/instagram_scrape.py              # scrape sungguhan
+   python scripts/instagram_scrape.py --max-posts=30
+   ```
+4. Hasil yang lolos filter (bukan residensi, eligible internasional/Indonesia)
+   ditulis ke `open_calls_instagram.json`. Tinjau dulu sebelum diimpor:
+   ```bash
+   python scripts/add_open_calls.py open_calls_instagram.json --dry-run
+   python scripts/add_open_calls.py open_calls_instagram.json
+   ```
+
+Setiap run `instagram_scrape.py` dan `add_open_calls.py` dicatat ke
+`pipeline_history.json` (git-ignored). Lihat riwayatnya dengan:
+```bash
+python scripts/show_log.py            # semua riwayat
+python scripts/show_log.py --last=10  # 10 run terakhir
+```
 
 ## Troubleshooting
 

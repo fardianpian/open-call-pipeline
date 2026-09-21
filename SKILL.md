@@ -28,10 +28,15 @@ Use this skill when the user asks to:
 
 ## Workflow
 
-1. **Source opportunities.** Run a discovery prompt from `references/`:
-   - `references/perplexity.md` — quick web search for fresh open calls.
-   - `references/claude_routine.md` — structured weekly routine.
-   Ask the model to return results as JSON matching `references/schema.md`.
+1. **Source opportunities.** Either:
+   - Run a discovery prompt from `references/`:
+     - `references/perplexity.md` — quick web search for fresh open calls.
+     - `references/claude_routine.md` — structured weekly routine.
+     Ask the model to return results as JSON matching `references/schema.md`.
+   - Or scrape Instagram: `python scripts/instagram_scrape.py` (needs
+     `APIFY_TOKEN` in `.env`; `--dry-run` works without it). Writes
+     `open_calls_instagram.json` after filtering out residencies and
+     ineligible-geography posts.
 
 2. **Validate the JSON.** Save results to `open_calls.json` in the skill root
    (start from `assets/open_calls.sample.json`). Confirm every entry has a
@@ -55,9 +60,10 @@ Use this skill when the user asks to:
 
 ## Configuration
 
-The script reads `.env` from the skill root:
+The scripts read `.env` from the skill root:
 - `NOTION_TOKEN` — Internal Integration Secret.
 - `NOTION_DATABASE_ID` — 32-char ID of the Open Call Pipeline database.
+- `APIFY_TOKEN` — only needed for `scripts/instagram_scrape.py`.
 
 Setup steps are in `README.md`.
 
@@ -71,6 +77,9 @@ Setup steps are in `README.md`.
 ## Files
 
 - `scripts/add_open_calls.py` — importer (Python stdlib only, no dependencies).
+- `scripts/instagram_scrape.py` — Instagram sourcing via Apify (stdlib only).
+- `scripts/pipeline_log.py` — shared helper, logs every run to `pipeline_history.json`.
+- `scripts/show_log.py` — prints `pipeline_history.json` as a table.
 - `references/schema.md` — field/property reference + allowed option values.
 - `references/perplexity.md`, `references/claude_routine.md` — sourcing prompts.
 - `assets/open_calls.sample.json` — example input.
