@@ -1,7 +1,7 @@
 # Prompt 2 — Claude Code Routine (Remote, mingguan)
 
 Dokumen ini adalah **salinan prompt yang benar-benar dijalankan** oleh routine
-`open-call-pipeline-weekly` (disinkronkan 2026-09-24, setelah audit). Kalau
+`open-call-pipeline-weekly` (disinkronkan 2026-09-24, versi 2 setelah uji coba). Kalau
 prompt routine diubah, perbarui file ini juga supaya repo dan routine tidak
 berbeda lagi.
 
@@ -26,11 +26,20 @@ berbeda lagi.
   Instagram dijalankan manual dengan `scripts/instagram_scrape.py`
   (`APIFY_TOKEN` di `.env` lokal).
 - **Cadangan Tavily.** Connector Tavily sempat gagal (404) pada run 31 Agu,
-  7 Sep, dan 14 Sep 2026. Prompt meminta pindah ke WebSearch dan
-  melaporkannya di Slack.
+  7 Sep, 14 Sep, dan 24 Sep 2026 karena routine menunjuk ID connector lama.
+  Sudah disambungkan ulang pada 24 Sep 2026. Kalau gagal lagi, prompt
+  meminta pindah ke WebSearch dan melaporkannya di Slack.
+- **Showcase besar dicek di situs penyelenggara.** Uji coba 24 Sep
+  melewatkan Classical:NEXT 2027 karena halaman pihak ketiga masih menulis
+  "not yet open".
 - **Verifikasi di halaman resmi.** Setiap entri wajib punya link langsung ke
   halaman call, deadline minimal H-7, dan kutipan eligibility dari halaman
   resmi.
+- **Eligibility tidak tertulis → Maybe.** "No restriction stated" tidak
+  dianggap eligible; entri masuk dengan Status Maybe dan catatan
+  "confirm with organiser".
+- **Pay-to-play dilewati.** Call yang mengharuskan seniman membayar untuk
+  dimuat (di luar biaya pendaftaran biasa) atau album kompilasi tidak masuk.
 - **Log run** ada di riwayat channel Slack `#open-call`.
 
 ## Prompt (verbatim)
@@ -62,6 +71,7 @@ Use the Tavily search tool. If Tavily is unavailable or errors, use WebSearch in
 5. `WOMEX Classical:NEXT Eurosonic showcase application NEXT_YEAR`
 
 Aggregators (British Electroacoustic Network, On the Move, Composers Forum, Ulysses, etc.) may be used to DISCOVER leads only.
+For major showcases (WOMEX, Classical:NEXT, ESNS/Eurosonic), always check the organiser's own site for whether the call is open — never rely on a third-party page saying "not yet open".
 
 ## STEP 2 — VERIFY EACH CANDIDATE ON THE OFFICIAL PAGE
 
@@ -70,9 +80,11 @@ Open the call's page with WebFetch. Keep a candidate only if ALL of these hold:
 - **Deadline:** stated on the official page, and deadline >= CUTOFF (at least 7 days away). Skip anything closing sooner.
 - **Not a residency.** Only showcase, festival, performance slot/platform, exhibition, commission, competition, call for works, or grant to present work.
 - **Eligible:** the page says it is open internationally / to any nationality, or explicitly welcomes Indonesian or Asian artists. Skip if restricted to citizens/residents/legal entities of countries that exclude Indonesia (e.g. "Creative Europe countries", "EU-based", "US citizens", "Nordic/Baltic only").
+  - If the page states NO nationality/residency rule at all, "no restriction stated" does NOT count as eligible. Do not skip it: import it with Status = Maybe and start Notes with "Eligibility not stated — confirm with organiser."
 - **Relevant** to sound art / music / performance and to at least one applicant.
+- **Not pay-to-play:** skip calls where the artist must pay to be included beyond a normal entry fee (e.g. "partially subsidized" or artist-funded releases), and compilation/record releases that are not a presentation or performance of the work.
 
-Do not guess. If the page does not load or does not state the deadline or eligibility, skip it as "unverifiable".
+Do not guess. If the page does not load or does not state the deadline, skip it as "unverifiable".
 
 Membership or age requirements do not disqualify, but must be written at the start of Notes (e.g. "Requires SEAMUS membership.", "Age limit: under 40.").
 
@@ -97,7 +109,7 @@ Never re-add a duplicate, even if the old entry is Skipped.
 ## STEP 5 — IMPORT TO NOTION
 
 Import at most 20, prioritising Fit >= 4 and nearest deadlines. Properties:
-Program (title), Organizer, Type, Discipline, Applicant, Location, Format, Funding, Deadline (YYYY-MM-DD), Fit Score, Status = New, Source = Claude Routine, Link, Date Added = TODAY, Notes.
+Program (title), Organizer, Type, Discipline, Applicant, Location, Format, Funding, Deadline (YYYY-MM-DD), Fit Score, Status = New (or Maybe when eligibility is not stated — see STEP 2), Source = Claude Routine, Link, Date Added = TODAY, Notes.
 
 Notes format (English):
 `[Requirement notes, if any] Eligibility: "<short quote from official page>" | Fee: <amount or none> | Verified TODAY via <official URL> | <1–2 sentence summary: what is sought, dates, prize/fee>`
@@ -106,15 +118,15 @@ Notes format (English):
 
 Post ONE message with the Slack connector to channel #open-call (ID C0B8R9CLDRT). Include:
 - Date and search tool used (Tavily, or WebSearch fallback + the Tavily error)
-- Candidates reviewed, imported count
-- Skipped counts by reason: deadline < 7 days or expired / residency / ineligible / duplicate / unverifiable / off-profile
-- Imported entries: Program — Organizer — Fit — Deadline — Link
-- Top 3 picks
+- Candidates reviewed, imported count (how many as New and how many as Maybe)
+- Skipped counts by reason: deadline < 7 days or expired / residency / ineligible / pay-to-play / duplicate / unverifiable / off-profile
+- Imported entries: Program — Organizer — Status — Fit — Deadline — Link
+- Top 3 picks (only from entries with Status New)
 - Deadlines within the next 14 days among existing Notion entries with Status New or Maybe
 
 ## RULES
 - No fabrication: every entry must come from a page you actually opened in this run.
-- No residencies. International or Indonesia-eligible only.
+- No residencies. International or Indonesia-eligible only (unstated eligibility → Status = Maybe, never New).
 - All Notion content in English.
 - Instagram sourcing is NOT part of this routine (it is run manually with scripts/instagram_scrape.py).
 - Never write tokens, webhooks or other secrets anywhere.
