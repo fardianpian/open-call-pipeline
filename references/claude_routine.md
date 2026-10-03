@@ -1,7 +1,8 @@
 # Prompt 2 — Claude Code Routine (Remote, mingguan)
 
 Dokumen ini adalah **salinan prompt yang benar-benar dijalankan** oleh routine
-`open-call-pipeline-weekly` (disinkronkan 2026-09-24, versi 2 setelah uji coba). Kalau
+`open-call-pipeline-weekly` (disinkronkan 2026-10-03, versi 3: aturan tanggal
+paling awal). Kalau
 prompt routine diubah, perbarui file ini juga supaya repo dan routine tidak
 berbeda lagi.
 
@@ -35,6 +36,11 @@ berbeda lagi.
 - **Verifikasi di halaman resmi.** Setiap entri wajib punya link langsung ke
   halaman call, deadline minimal H-7, dan kutipan eligibility dari halaman
   resmi.
+- **Beberapa tanggal → pakai yang paling awal.** Kalau call punya beberapa
+  tahap (mis. registrasi lalu pengumpulan karya), kolom Deadline diisi tanggal
+  paling awal yang wajib dipenuhi, dan semua tanggal ditulis di Notes. Dipicu
+  oleh Totem Electroacoustic 2026, yang deadline-nya dikoreksi ke tanggal
+  registrasi (21 Nov 2026).
 - **Eligibility tidak tertulis → Maybe.** "No restriction stated" tidak
   dianggap eligible; entri masuk dengan Status Maybe dan catatan
   "confirm with organiser".
@@ -77,7 +83,7 @@ For major showcases (WOMEX, Classical:NEXT, ESNS/Eurosonic), always check the or
 
 Open the call's page with WebFetch. Keep a candidate only if ALL of these hold:
 - **Direct link:** Link is the organiser's own call/submission page (or its official submission form). Not a homepage, not an aggregator, not an Instagram post.
-- **Deadline:** stated on the official page, and deadline >= CUTOFF (at least 7 days away). Skip anything closing sooner.
+- **Deadline:** stated on the official page, and deadline >= CUTOFF (at least 7 days away). Skip anything closing sooner. If the call has several dates (e.g. registration first, then submission), use the EARLIEST one that the applicant must meet as Deadline, check that one against CUTOFF, and mention every date in Notes (e.g. "Registration by Nov 21; work due Dec 21").
 - **Not a residency.** Only showcase, festival, performance slot/platform, exhibition, commission, competition, call for works, or grant to present work.
 - **Eligible:** the page says it is open internationally / to any nationality, or explicitly welcomes Indonesian or Asian artists. Skip if restricted to citizens/residents/legal entities of countries that exclude Indonesia (e.g. "Creative Europe countries", "EU-based", "US citizens", "Nordic/Baltic only").
   - If the page states NO nationality/residency rule at all, "no restriction stated" does NOT count as eligible. Do not skip it: import it with Status = Maybe and start Notes with "Eligibility not stated — confirm with organiser."
