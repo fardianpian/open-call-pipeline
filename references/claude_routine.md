@@ -1,8 +1,8 @@
 # Prompt 2 — Claude Code Routine (Remote, mingguan)
 
 Dokumen ini adalah **salinan prompt yang benar-benar dijalankan** oleh routine
-`open-call-pipeline-weekly` (disinkronkan 2026-10-03, versi 3: aturan tanggal
-paling awal). Kalau
+`open-call-pipeline-weekly` (disinkronkan 2026-10-06, versi 4: aturan
+eligibility internasional eksplisit). Kalau
 prompt routine diubah, perbarui file ini juga supaya repo dan routine tidak
 berbeda lagi.
 
@@ -41,6 +41,12 @@ berbeda lagi.
   paling awal yang wajib dipenuhi, dan semua tanggal ditulis di Notes. Dipicu
   oleh Totem Electroacoustic 2026, yang deadline-nya dikoreksi ke tanggal
   registrasi (21 Nov 2026).
+- **Kata "internasional" yang eksplisit → New.** Frasa seperti "from around the
+  globe" atau "all nationalities" dihitung eligible dan wajib dikutip di Notes,
+  selama tidak ada pembatasan negara di bagian lain halaman. Kalimat tentang
+  gaya atau instrumentasi bukan kutipan eligibility. Dipicu oleh MATA Festival
+  2027, yang pada run 5 Okt 2026 masuk sebagai Maybe padahal halamannya menulis
+  "from around the globe" (diubah manual ke New pada 6 Okt 2026).
 - **Eligibility tidak tertulis → Maybe.** "No restriction stated" tidak
   dianggap eligible; entri masuk dengan Status Maybe dan catatan
   "confirm with organiser".
@@ -89,6 +95,10 @@ Open the call's page with WebFetch. Keep a candidate only if ALL of these hold:
   - If the page states NO nationality/residency rule at all, "no restriction stated" does NOT count as eligible. Do not skip it: import it with Status = Maybe and start Notes with "Eligibility not stated — confirm with organiser."
 - **Relevant** to sound art / music / performance and to at least one applicant.
 - **Not pay-to-play:** skip calls where the artist must pay to be included beyond a normal entry fee (e.g. "partially subsidized" or artist-funded releases), and compilation/record releases that are not a presentation or performance of the work.
+  - Explicit international wording counts as eligible. Phrases such as "from around the globe", "worldwide", "international", "all nationalities", "from anywhere", or "open to everyone" mean the call is open internationally: import it with Status = New and quote that wording in Notes. This holds only if no nationality, residency or country restriction appears anywhere else on the page (guidelines, FAQ, rules); if one does, apply the restriction rule above instead.
+  - Only a sentence about WHO may apply (nationality, residency, location) counts as an eligibility quote. A sentence about style, genre, instrumentation or theme is NOT an eligibility statement and must not be quoted as one.
+  - Use Status = Maybe only when the page has no sentence about who may apply at all, as described in the previous bullet.
+  - Career stage, age or membership limits (e.g. "early-career composers") do not change Status. Write them at the start of Notes, per the existing rule.
 
 Do not guess. If the page does not load or does not state the deadline, skip it as "unverifiable".
 
